@@ -225,6 +225,11 @@ window.onSpeedSource = (name, spd, ok)=>{
   if(ok){ $(`#sb-${i}`).style.width = Math.min(spd,100)+"%"; v.textContent = spd.toFixed(1)+" Mbps"; v.style.color="var(--success)"; }
   else  { $(`#sb-${i}`).style.width="0"; v.textContent="失败"; v.style.color="var(--danger)"; }
 };
+window.onSpeedSkip = (name)=>{
+  const i = speedSrcMap[name]; if(i===undefined) return;
+  $(`#sb-${i}`).style.width="0";
+  const v=$(`#sv-${i}`); v.textContent="已跳过"; v.style.color="var(--td)";
+};
 window.onSpeedDone = (res, cancelled)=>{
   speeding = false; $("#btnSpeed").disabled=false; $("#btnSpeedStop").disabled=true;
   if(cancelled){ $("#speedStatus").textContent="已取消"; return; }

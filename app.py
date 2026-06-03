@@ -13,6 +13,15 @@ import sys
 import json
 import threading
 
+# 精简 WebView2 后台行为以降低空闲资源占用（须在 webview 启动前设置）。
+# 仅关闭翻译、SmartScreen 上报、组件更新与后台网络等非必要特性，
+# 不禁用 GPU，避免界面渲染异常。
+os.environ.setdefault(
+    "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+    "--disable-features=Translate,msSmartScreenProtection,OptimizationHints "
+    "--disable-background-networking --disable-component-update "
+    "--disable-breakpad")
+
 import webview
 
 import history as hist
@@ -138,6 +147,9 @@ class Api:
         self._cancel_speed = True
         return True
 
+    # 测到 ENOUGH 个有效源即可算出最优/平均/峰值，余下源跳过以节省带宽与时间
+    ENOUGH_SAMPLES = 2
+
     def _run_speed(self):
         urls = SpeedTester.SPEED_TEST_URLS
         n = len(urls)
@@ -149,6 +161,11 @@ class Api:
         for i, (url, expected, name) in enumerate(urls):
             if self._cancel_speed:
                 break
+            # 已取得足够样本，跳过剩余源（仅通知前端，不发起网络请求）
+            if len(speeds) >= self.ENOUGH_SAMPLES:
+                self._emit("onSpeedSkip", name)
+                continue
+
             self._emit("onSpeedStatus", f"测试 {name}…", int(i / n * 100))
             max_b = expected if expected > 0 else 2 * 1024 * 1024
 

@@ -71,6 +71,15 @@ def _decode(b):
     return b.decode("utf-8", "ignore")
 
 
+# 复用 SSL 上下文与 opener，避免每次检测重建（省 CPU 与内存）
+_SSL_CTX = ssl._create_unverified_context()
+_DIRECT_OPENER = urllib.request.build_opener(            # 强制直连
+    urllib.request.ProxyHandler({}),
+    urllib.request.HTTPSHandler(context=_SSL_CTX))
+_PROXY_OPENER = urllib.request.build_opener(             # 走系统代理
+    urllib.request.HTTPSHandler(context=_SSL_CTX))
+
+
 class VPNDetector:
 
     # ── 系统代理（注册表）──────────────────────────────────
@@ -140,15 +149,11 @@ class VPNDetector:
         返回 (status, ip, loc)  status ∈ {'off','on','plus',None}
         WARP 是网络层隧道，即使直连 socket 也会经它转发，故此处直接请求即可。
         """
-        ctx = ssl._create_unverified_context()
-        opener = urllib.request.build_opener(
-            urllib.request.ProxyHandler({}),   # 排除残留代理干扰
-            urllib.request.HTTPSHandler(context=ctx))
         try:
             req = urllib.request.Request(
                 "https://www.cloudflare.com/cdn-cgi/trace",
                 headers={"User-Agent": "Mozilla/5.0"})
-            text = opener.open(req, timeout=5).read().decode("utf-8", "ignore")
+            text = _DIRECT_OPENER.open(req, timeout=5).read().decode("utf-8", "ignore")
             kv = dict(line.split("=", 1) for line in text.splitlines() if "=" in line)
             return kv.get("warp"), kv.get("ip"), kv.get("loc")
         except Exception:
@@ -175,15 +180,8 @@ class VPNDetector:
         """对比直连出口 IP 与系统代理出口 IP，判断代理是否真在转发。
         返回 (direct_ip, proxy_ip, rerouting:bool|None)
         """
-        ctx = ssl._create_unverified_context()
-        direct = urllib.request.build_opener(
-            urllib.request.ProxyHandler({}),
-            urllib.request.HTTPSHandler(context=ctx))
-        through = urllib.request.build_opener(
-            urllib.request.HTTPSHandler(context=ctx))  # 走系统代理
-
-        d_ip = VPNDetector._fetch_ip(direct)
-        p_ip = VPNDetector._fetch_ip(through)
+        d_ip = VPNDetector._fetch_ip(_DIRECT_OPENER)
+        p_ip = VPNDetector._fetch_ip(_PROXY_OPENER)
         if d_ip and p_ip:
             return d_ip, p_ip, (d_ip != p_ip)
         return d_ip, p_ip, None

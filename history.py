@@ -31,3 +31,13 @@ def append(results: dict) -> list:
     except Exception:
         pass
     return records
+
+
+def clear() -> bool:
+    """清空所有历史记录"""
+    try:
+        if os.path.exists(_PATH):
+            os.remove(_PATH)
+        return True
+    except Exception:
+        return False

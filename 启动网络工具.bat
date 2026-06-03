@@ -1,5 +1,5 @@
 @echo off
 chcp 65001 >nul
-title 网络检测修复工具
-python "%~dp0network_tool.py"
+title 网络检测修复工具 (Web版)
+python app.py
 pause

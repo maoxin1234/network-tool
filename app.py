@@ -58,6 +58,9 @@ class Api:
     def get_history(self):
         return hist.load_all()
 
+    def clear_history(self):
+        return {"ok": hist.clear()}
+
     # ── 一键检测（后台线程）─────────────────────────────
     def start_check(self):
         threading.Thread(target=self._run_check, daemon=True).start()

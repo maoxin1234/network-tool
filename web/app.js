@@ -306,6 +306,7 @@ const HNAME = {internet:"互联网", dns:"DNS", ping:"延迟", vpn:"VPN"};
 async function renderHistory(){
   let recs = [];
   try{ recs = await api().get_history(); }catch(e){}
+  $("#historyBar").hidden = !(recs && recs.length);
   if(!recs || !recs.length){
     $("#historyList").innerHTML = `<div class="card empty">
       <div class="big">📋</div><div class="t">暂无历史记录</div>
@@ -329,6 +330,30 @@ async function renderHistory(){
   }).join("");
 }
 
+let _clearArmed = false;
+async function clearHistory(){
+  const btn = $("#btnClearHistory");
+  if(!_clearArmed){
+    _clearArmed = true;
+    btn.textContent = "⚠ 再次点击确认清空";
+    btn.classList.add("btn-warn"); btn.classList.remove("btn-outline");
+    clearTimeout(btn._t);
+    btn._t = setTimeout(()=>{
+      _clearArmed = false;
+      btn.textContent = "🗑 清空历史";
+      btn.classList.add("btn-outline"); btn.classList.remove("btn-warn");
+    }, 3000);
+    return;
+  }
+  clearTimeout(btn._t); _clearArmed = false;
+  btn.textContent = "🗑 清空历史";
+  btn.classList.add("btn-outline"); btn.classList.remove("btn-warn");
+  let res = {ok:false};
+  try{ res = await api().clear_history(); }catch(e){}
+  toast(res.ok ? "历史已清空" : "清空失败");
+  renderHistory();
+}
+
 /* ═══════════════ 启动 ═══════════════ */
 async function init(){
   buildCheckCards();
@@ -336,6 +361,7 @@ async function init(){
   $("#btnSpeed").onclick = startSpeed;
   $("#btnSpeedStop").onclick = ()=>{ api().stop_speed_test(); $("#speedStatus").textContent="正在停止…"; };
   $("#btnInfoRefresh").onclick = refreshInfo;
+  $("#btnClearHistory").onclick = clearHistory;
   buildSpeedSources();
   try{ const a = await api().get_admin(); isAdmin = !!(a && a.admin); }catch(e){}
   const chip = $("#adminChip");

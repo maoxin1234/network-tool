@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>网络检测修复工具</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- ╔═══ 侧栏 ═══╗ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logo">◉</div>
+      <div class="brand-text">
+        <div class="brand-title">网络工具</div>
+        <div class="brand-sub">检测 · 修复 · 测速</div>
+      </div>
+    </div>
+
+    <div class="admin-chip" id="adminChip">
+      <span class="dot"></span><span id="adminText">检测权限中…</span>
+    </div>
+
+    <nav class="nav" id="nav">
+      <button class="nav-item active" data-page="check"><span class="nav-ico">⬡</span>一键检测</button>
+      <button class="nav-item" data-page="speed"><span class="nav-ico">↯</span>网速测试</button>
+      <button class="nav-item" data-page="repair"><span class="nav-ico">⚙</span>智能修复</button>
+      <button class="nav-item" data-page="info"><span class="nav-ico">≡</span>网络信息</button>
+      <button class="nav-item" data-page="history"><span class="nav-ico">◷</span>检测历史</button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div>F5 / 按钮 快速检测</div>
+      <div class="ver">v3.0 · Web UI</div>
+    </div>
+  </aside>
+
+  <!-- ╔═══ 内容区 ═══╗ -->
+  <main class="content">
+
+    <!-- ── 一键检测 ── -->
+    <section class="page active" id="page-check">
+      <header class="page-head">
+        <h1>一键检测</h1>
+        <p>快速诊断互联网连接、DNS、延迟与 VPN/代理状态</p>
+      </header>
+
+      <div class="scroll">
+        <div id="checkCards"></div>
+
+        <div class="action-bar">
+          <button class="btn btn-primary" id="btnCheck">▶ 开始检测</button>
+          <div class="progress"><div class="progress-fill" id="checkProg"></div></div>
+          <span class="muted" id="checkProgTxt"></span>
+        </div>
+
+        <div id="checkSummary"></div>
+      </div>
+    </section>
+
+    <!-- ── 网速测试 ── -->
+    <section class="page" id="page-speed">
+      <header class="page-head">
+        <h1>网速测试</h1>
+        <p>从多个国内镜像源实测下载速度，实时仪表盘显示</p>
+      </header>
+
+      <div class="scroll">
+        <div class="card gauge-card">
+          <div class="gauge-wrap">
+            <svg class="gauge" viewBox="0 0 200 120">
+              <path class="gauge-track" d="M20 110 A 80 80 0 0 1 180 110"/>
+              <path class="gauge-fill"  id="gaugeFill" d="M20 110 A 80 80 0 0 1 180 110"/>
+            </svg>
+            <div class="gauge-center">
+              <div class="gauge-num" id="speedNum">—</div>
+              <div class="gauge-unit">Mbps</div>
+            </div>
+          </div>
+          <div class="gauge-detail" id="speedDetail">
+            <div class="dl-row"><span>平均速度</span><b data-k="avg">— Mbps</b></div>
+            <div class="dl-row"><span>峰值速度</span><b data-k="peak">— Mbps</b></div>
+            <div class="dl-row"><span>下载量</span><b data-k="dl_mb">— MB</b></div>
+            <div class="dl-row"><span>耗时</span><b data-k="el">— 秒</b></div>
+            <div class="dl-row"><span>最优源</span><b data-k="src">未测试</b></div>
+            <div class="dl-row"><span>评级</span><b data-k="grade">—</b></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">各测速源</div>
+          <div id="speedSources"></div>
+        </div>
+
+        <div class="action-bar">
+          <button class="btn btn-primary" id="btnSpeed">▶ 开始测速</button>
+          <button class="btn btn-outline" id="btnSpeedStop" disabled>⏹ 停止</button>
+          <div class="progress"><div class="progress-fill" id="speedProg"></div></div>
+          <span class="muted" id="speedStatus">准备就绪</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 智能修复 ── -->
+    <section class="page" id="page-repair">
+      <header class="page-head">
+        <h1>智能修复</h1>
+        <p>一键修复常见网络问题</p>
+      </header>
+      <div class="scroll">
+        <div class="warn-banner" id="repairWarn" hidden>
+          ⚠ 当前非管理员模式，Winsock 重置、IP 释放等操作可能失败。请以管理员身份运行。
+        </div>
+        <div id="repairCards"></div>
+      </div>
+    </section>
+
+    <!-- ── 网络信息 ── -->
+    <section class="page" id="page-info">
+      <header class="page-head">
+        <h1>网络信息</h1>
+        <p>查看当前设备的网络配置详情</p>
+      </header>
+      <div class="scroll">
+        <div class="action-bar end">
+          <button class="btn btn-outline" id="btnInfoRefresh">↺ 刷新</button>
+        </div>
+        <div id="infoCards"></div>
+      </div>
+    </section>
+
+    <!-- ── 检测历史 ── -->
+    <section class="page" id="page-history">
+      <header class="page-head">
+        <h1>检测历史</h1>
+        <p>最近的检测记录，持久保存于本地</p>
+      </header>
+      <div class="scroll">
+        <div id="historyList"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

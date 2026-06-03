@@ -72,14 +72,36 @@
 
 ---
 
+## 两种界面
+
+本工具提供两套界面，核心检测逻辑完全相同，可按喜好选择：
+
+| 版本 | 入口 | 说明 |
+|------|------|------|
+| **Web UI（推荐）** | `app.py` | 基于 PyWebview，界面用 HTML/CSS/JS 渲染，效果更现代（圆角、阴影、动画、SVG 速度仪表盘）。仍是独立桌面程序，无需浏览器。 |
+| 经典版 | `network_tool.py` | 纯 tkinter 实现，零第三方依赖。 |
+
 ## 运行方式
 
 ### 环境要求
 - Windows 系统（部分功能兼容 Linux / macOS）
-- Python 3.x（仅使用标准库，无需安装依赖）
+- Python 3.x
 
-### 启动
-双击 `启动网络工具.bat`，或在命令行运行：
+### Web UI 版（推荐）
+首次运行需安装依赖：
+
+```bash
+pip install -r requirements.txt
+```
+
+然后双击 `启动网络工具(Web版).bat`，或运行：
+
+```bash
+python app.py
+```
+
+### 经典 tkinter 版
+仅使用标准库，无需安装依赖。双击 `启动网络工具.bat`，或运行：
 
 ```bash
 python network_tool.py
@@ -93,14 +115,20 @@ python network_tool.py
 ## 项目结构
 
 ```
-network_tool.py      主程序（UI 与业务逻辑）
+app.py               Web UI 版入口（PyWebview 桥接后端）
+web/                 前端界面
+  ├─ index.html      页面结构
+  ├─ styles.css      Fluent Design 样式
+  └─ app.js          前端逻辑（含实时测速推送）
+network_tool.py      经典版主程序（tkinter UI）
 network_utils.py     网络检测与修复功能（连通性、DNS、Ping、修复操作）
 speed_tester.py      网络测速模块（多源测速，绕过代理直连）
 vpn_detector.py      VPN / 代理检测模块（含风险评估）
-ui_components.py     Fluent Design UI 组件库
+ui_components.py     tkinter 版 UI 组件库
 history.py           检测历史持久化模块
-启动网络工具.bat       一键启动脚本
-说明文档.md           本文档
+requirements.txt     第三方依赖清单
+启动网络工具(Web版).bat   Web 版启动脚本
+启动网络工具.bat       经典版启动脚本
 ```
 
 ---

@@ -2,7 +2,7 @@
 
 一款 Windows 11 Fluent Design 风格的网络诊断、修复与测速工具，使用 Python + tkinter 编写，无需安装任何第三方依赖。
 
-![一键检测页面](screenshot-一键检测页面.png)
+![一键检测页面](screenshot-web-ui.png)
 
 ---
 

@@ -11,7 +11,6 @@ const CHECK_ITEMS = [
   {id:"ping",     ttl:"网络延迟",  desc:"Ping 测试延迟与丢包率",  ico:"↯", bg:"#FFF4CE", fg:"#C77700"},
   {id:"vpn",      ttl:"VPN / 代理", desc:"检测代理状态、类型与风险", ico:"⛨", bg:"#F3EDFA", fg:"#7B4FB5"},
 ];
-
 const REPAIR_ITEMS = [
   {id:"flush_dns",    ttl:"刷新 DNS 缓存", desc:"清除本地 DNS 缓存，解决域名解析异常", warn:"⚠ 安全操作，不影响正常使用", ico:"🗂", admin:false},
   {id:"reset_proxy",  ttl:"清除代理设置",  desc:"关闭系统代理，修复代理导致的连接问题", warn:"⚠ 会关闭当前代理",        ico:"🔗", admin:false},
@@ -19,7 +18,6 @@ const REPAIR_ITEMS = [
   {id:"reset_ip",     ttl:"释放并更新 IP",desc:"重新获取 IP 地址，解决 IP 冲突",      warn:"⚠ 操作期间短暂断网",      ico:"🔄", admin:true},
   {id:"reset_adapter",ttl:"重置网络适配器",desc:"重置所有网络适配器到默认配置",        warn:"⚠ 需要重启计算机生效",    ico:"🔌", admin:true},
 ];
-
 const REPAIR_LABEL = {
   flush_dns:"🗂 刷新 DNS", reset_proxy:"🔗 清除代理",
   reset_winsock:"⚙ 重置 Winsock", reset_ip:"↺ 更新 IP", reset_adapter:"⚙ 重置适配器",
@@ -35,6 +33,7 @@ const RISK_CLASS = {none:"ok", low:"ok", medium:"wf", high:"fail"};
 let isAdmin = false;
 let lastResults = {};
 let checking = false, speeding = false;
+let quickRepairToken = 0;           // 检测页快捷修复的反馈定位
 
 /* ─── 工具 ─── */
 function toast(msg){
@@ -47,6 +46,7 @@ function copyText(text){
   try{ document.execCommand("copy"); toast("已复制"); }catch(e){}
   ta.remove();
 }
+function setProg(sel, pct){ $(sel).style.width = Math.max(0,Math.min(100,pct))+"%"; }
 
 /* ═══════════════ 导航 ═══════════════ */
 $$(".nav-item").forEach(b=>{
@@ -66,7 +66,7 @@ document.addEventListener("keydown", e=>{
   if(e.key==="F5"){
     e.preventDefault();
     const p = curPage();
-    if(p==="check" && !checking) runCheck();
+    if(p==="check" && !checking) startCheck();
     else if(p==="speed" && !speeding) startSpeed();
     else if(p==="info") refreshInfo();
   }
@@ -88,50 +88,43 @@ function buildCheckCards(){
       <div class="sub" hidden></div>
     </div>`).join("");
 }
-function setBadge(id, state){ $(`#cc-${id} .badge`).className = "badge "+state; }
+function setBadge(id, state){ const b=$(`#cc-${id} .badge`); if(b) b.className = "badge "+state; }
 function setRes(id, text, cls){
-  const el = $(`#cc-${id} .res`); el.textContent = text;
+  const el = $(`#cc-${id} .res`); if(!el) return; el.textContent = text;
   el.style.color = cls==="ok" ? "var(--success)" : cls==="fail" ? "var(--danger)"
                  : cls==="wf" ? "var(--warn-fg)" : "var(--td)";
 }
 
-async function runCheck(){
+/* 触发检测（不阻塞，结果由后端回调推送）*/
+function startCheck(){
   if(checking) return; checking = true;
   lastResults = {};
   $("#btnCheck").disabled = true;
   $("#checkSummary").innerHTML = "";
   CHECK_ITEMS.forEach(it=>{
-    setBadge(it.id,"running"); setRes(it.id,"检测中…","");
+    setBadge(it.id,"running"); setRes(it.id,"等待检测…","");
     const sub = $(`#cc-${it.id} .sub`); sub.hidden = true; sub.innerHTML = "";
   });
-
-  const steps = [
-    ["internet", ()=>api().check_internet()],
-    ["dns",      ()=>api().check_dns()],
-    ["ping",     ()=>api().check_ping()],
-    ["vpn",      ()=>api().check_vpn()],
-  ];
-  for(let i=0;i<steps.length;i++){
-    const [id, fn] = steps[i];
-    setProg("#checkProg", i/steps.length*100);
-    $("#checkProgTxt").textContent = `检测 ${i+1} / ${steps.length}…`;
-    const r = await fn();
-    lastResults[id] = r;
-    if(id==="vpn") renderVpn(r);
-    else{
-      const ok = r.status==="ok";
-      setBadge(id, ok?"good":"bad");
-      setRes(id, (ok?"✓ ":"✗ ")+r.summary, ok?"ok":"fail");
-      if(!ok) renderSuggest(id);
-    }
-  }
-  setProg("#checkProg",100);
-  $("#checkProgTxt").textContent = "检测完成";
-  $("#btnCheck").disabled = false;
-  checking = false;
-  renderSummary();
-  api().save_history(lastResults);
+  api().start_check();
 }
+
+/* 后端回调 */
+window.onCheckProgress = (pct, txt)=>{ setProg("#checkProg", pct); $("#checkProgTxt").textContent = txt; };
+window.onCheckRunning  = (id)=>{ setBadge(id,"running"); setRes(id,"检测中…",""); };
+window.onCheckResult   = (id, r)=>{
+  lastResults[id] = r;
+  if(id==="vpn"){ renderVpn(r); return; }
+  const ok = r.status==="ok";
+  setBadge(id, ok?"good":"bad");
+  setRes(id, (ok?"✓ ":"✗ ")+r.summary, ok?"ok":"fail");
+  if(!ok) renderSuggest(id);
+};
+window.onCheckDone = (results)=>{
+  lastResults = results;
+  checking = false;
+  $("#btnCheck").disabled = false;
+  renderSummary();
+};
 
 function renderSuggest(id){
   const ids = SUGGEST[id]||[]; if(!ids.length) return;
@@ -140,11 +133,13 @@ function renderSuggest(id){
     ${ids.map(rid=>`<button class="chip-btn" data-r="${rid}">${REPAIR_LABEL[rid]}</button>`).join("")}
     <span class="sub-line" style="margin:0 0 0 auto" id="fb-${id}"></span></div>`;
   $$(`#cc-${id} .chip-btn`).forEach(b=>{
-    b.onclick = async ()=>{
-      b.disabled = true; const fb = $(`#fb-${id}`); fb.textContent = "修复中…"; fb.className="sub-line wf";
-      const res = await api().run_repair(b.dataset.r);
-      fb.textContent = res.msg; fb.className = "sub-line "+(res.ok?"ok":"fail");
-      b.disabled = false;
+    b.onclick = ()=>{
+      b.disabled = true;
+      const fb = $(`#fb-${id}`); fb.textContent = "修复中…"; fb.className="sub-line wf";
+      const token = "q"+(++quickRepairToken);
+      fb.id = "fb-"+token;             // 用 token 定位回调
+      b._tok = token;
+      api().start_repair(b.dataset.r, token);
     };
   });
 }
@@ -165,9 +160,9 @@ function renderVpn(r){
 }
 
 function renderSummary(){
-  const conn = Object.entries(lastResults).filter(([k,v])=>!v.informational && k!=="vpn");
+  const conn = Object.entries(lastResults).filter(([k,v])=> k!=="vpn" && !(v&&v.informational));
   const okN = conn.filter(([,v])=>v.status==="ok").length;
-  const total = conn.length, allOk = okN===total;
+  const total = conn.length, allOk = okN===total && total>0;
   $("#checkSummary").innerHTML = `
     <div class="card" style="display:flex;align-items:center;gap:14px">
       <div style="font-size:26px">${allOk?"✅":"⚠️"}</div>
@@ -176,8 +171,9 @@ function renderSummary(){
           ${allOk?"网络状态良好":`发现 ${total-okN} 项异常`}</div>
         <div class="muted">${allOk?`全部 ${total} 项通过`:`${okN} / ${total} 项通过`}</div>
       </div>
-      ${allOk?"":`<button class="btn btn-warn btn-sm" onclick="document.querySelector('[data-page=repair]').click()">前往修复</button>`}
+      ${allOk?"":`<button class="btn btn-warn btn-sm" id="goRepair">前往修复</button>`}
     </div>`;
+  const gr = $("#goRepair"); if(gr) gr.onclick = ()=> $('[data-page=repair]').click();
 }
 
 /* ═══════════════ 网速测试 ═══════════════ */
@@ -190,11 +186,11 @@ function setGauge(speed){
   $("#speedNum").textContent = speed>0 ? speed.toFixed(1) : "—";
   $("#speedNum").style.color = fill.style.stroke;
 }
-function setProg(sel, pct){ $(sel).style.width = Math.max(0,Math.min(100,pct))+"%"; }
 
 let speedSrcMap = {};
 async function buildSpeedSources(){
-  const names = await api().speed_sources();
+  let names = [];
+  try{ names = await api().speed_sources(); }catch(e){ return; }
   speedSrcMap = {};
   $("#speedSources").innerHTML = names.map((n,i)=>`
     <div class="src-row">
@@ -211,24 +207,23 @@ function startSpeed(){
   setGauge(0); setProg("#speedProg",0);
   $("#speedStatus").textContent = "连接测速源中…";
   $$("#speedDetail b").forEach(b=>b.textContent="测速中…");
-  Object.values(speedSrcMap).forEach(i=>{ $(`#sb-${i}`).style.width="0"; $(`#sv-${i}`).textContent="等待…"; $(`#sv-${i}`).style.color="var(--td)"; });
+  Object.values(speedSrcMap).forEach(i=>{
+    $(`#sb-${i}`).style.width="0"; const v=$(`#sv-${i}`); v.textContent="等待…"; v.style.color="var(--td)"; });
   api().start_speed_test();
 }
-$("#btnSpeedStop").onclick = ()=>{ api().stop_speed_test(); $("#speedStatus").textContent="正在停止…"; };
 
-/* 后端推送回调 */
 window.onSpeedStatus = (text, pct)=>{ $("#speedStatus").textContent = text; setProg("#speedProg", pct); };
 window.onSpeedLive = (spd, name)=>{
   setGauge(spd);
   const i = speedSrcMap[name];
-  if(i!==undefined){ $(`#sb-${i}`).style.width = Math.min(spd/100*100,100)+"%";
-    $(`#sv-${i}`).textContent = spd.toFixed(1)+" Mbps ↗"; $(`#sv-${i}`).style.color="var(--accent)"; }
+  if(i!==undefined){ $(`#sb-${i}`).style.width = Math.min(spd,100)+"%";
+    const v=$(`#sv-${i}`); v.textContent = spd.toFixed(1)+" Mbps ↗"; v.style.color="var(--accent)"; }
 };
-window.onSpeedSource = (name, spd, ok, err)=>{
+window.onSpeedSource = (name, spd, ok)=>{
   const i = speedSrcMap[name]; if(i===undefined) return;
-  if(ok){ $(`#sb-${i}`).style.width = Math.min(spd/100*100,100)+"%";
-    $(`#sv-${i}`).textContent = spd.toFixed(1)+" Mbps"; $(`#sv-${i}`).style.color="var(--success)"; }
-  else  { $(`#sb-${i}`).style.width="0"; $(`#sv-${i}`).textContent="失败"; $(`#sv-${i}`).style.color="var(--danger)"; }
+  const v=$(`#sv-${i}`);
+  if(ok){ $(`#sb-${i}`).style.width = Math.min(spd,100)+"%"; v.textContent = spd.toFixed(1)+" Mbps"; v.style.color="var(--success)"; }
+  else  { $(`#sb-${i}`).style.width="0"; v.textContent="失败"; v.style.color="var(--danger)"; }
 };
 window.onSpeedDone = (res, cancelled)=>{
   speeding = false; $("#btnSpeed").disabled=false; $("#btnSpeedStop").disabled=true;
@@ -238,7 +233,7 @@ window.onSpeedDone = (res, cancelled)=>{
   setGauge(res.best); setProg("#speedProg",100); $("#speedStatus").textContent="测速完成";
   const m = {avg:res.avg+" Mbps", peak:res.peak+" Mbps", dl_mb:res.dl_mb+" MB",
             el:res.el+" 秒", src:res.src, grade:res.grade};
-  $$("#speedDetail b").forEach(b=> b.textContent = m[b.dataset.k] ?? "—");
+  $$("#speedDetail b").forEach(b=> b.textContent = m[b.dataset.k] || "—");
 };
 
 /* ═══════════════ 智能修复 ═══════════════ */
@@ -258,22 +253,35 @@ function buildRepairCards(){
       </div>
     </div>`).join("");
   $$("#repairCards button[data-r]").forEach(b=>{
-    b.onclick = async ()=>{
+    b.onclick = ()=>{
       b.disabled = true; const st = $(`#rst-${b.dataset.r}`);
       st.textContent="修复中…"; st.className="st wf";
-      const res = await api().run_repair(b.dataset.r);
-      st.textContent = res.msg; st.className = "st "+(res.ok?"ok":"fail");
-      b.disabled = false;
-      toast(res.ok?"修复完成":"修复失败");
+      api().start_repair(b.dataset.r, "");      // token 空 = 修复页
     };
   });
 }
 
+/* 修复回调（检测页快捷修复 token!=="" / 修复页 token==="" 区分）*/
+window.onRepairDone = (id, ok, msg, token)=>{
+  if(token){
+    const fb = $("#fb-"+token);
+    if(fb){ fb.textContent = msg; fb.className = "sub-line "+(ok?"ok":"fail"); }
+    $$(".chip-btn").forEach(b=>{ if(b._tok===token) b.disabled=false; });
+  }else{
+    const st = $(`#rst-${id}`);
+    if(st){ st.textContent = msg; st.className = "st "+(ok?"ok":"fail"); }
+    const btn = $(`#repairCards button[data-r="${id}"]`); if(btn) btn.disabled=false;
+    toast(ok?"修复完成":"修复失败");
+  }
+};
+
 /* ═══════════════ 网络信息 ═══════════════ */
-async function refreshInfo(){
+function refreshInfo(){
   $("#btnInfoRefresh").disabled = true;
   $("#infoCards").innerHTML = `<div class="muted" style="padding:8px">读取中…</div>`;
-  const info = await api().get_network_info();
+  api().start_info();
+}
+window.onInfo = (info)=>{
   const rows = [
     ["💻","主机名", info.hostname||"未知"],
     ["🌐","IPv4 地址",(info.ipv4||["无法获取"]).join("\n")],
@@ -291,13 +299,13 @@ async function refreshInfo(){
     </div>`).join("");
   $$("#infoCards button[data-c]").forEach(b=> b.onclick=()=>copyText(b.dataset.c));
   $("#btnInfoRefresh").disabled = false;
-}
-$("#btnInfoRefresh").onclick = refreshInfo;
+};
 
 /* ═══════════════ 检测历史 ═══════════════ */
 const HNAME = {internet:"互联网", dns:"DNS", ping:"延迟", vpn:"VPN"};
 async function renderHistory(){
-  const recs = await api().get_history();
+  let recs = [];
+  try{ recs = await api().get_history(); }catch(e){}
   if(!recs || !recs.length){
     $("#historyList").innerHTML = `<div class="card empty">
       <div class="big">📋</div><div class="t">暂无历史记录</div>
@@ -307,7 +315,7 @@ async function renderHistory(){
   $("#historyList").innerHTML = recs.map(rec=>{
     const rs = rec.results||{};
     const conn = Object.entries(rs).filter(([k])=>k!=="vpn");
-    const allOk = conn.every(([,v])=>v.status==="ok");
+    const allOk = conn.length>0 && conn.every(([,v])=>v.status==="ok");
     return `<div class="card hist-card">
       <div class="ts">${allOk?"✅":"⚠️"} ${rec.ts||""}</div>
       <div class="hist-grid">
@@ -324,11 +332,18 @@ async function renderHistory(){
 /* ═══════════════ 启动 ═══════════════ */
 async function init(){
   buildCheckCards();
+  $("#btnCheck").onclick = startCheck;
+  $("#btnSpeed").onclick = startSpeed;
+  $("#btnSpeedStop").onclick = ()=>{ api().stop_speed_test(); $("#speedStatus").textContent="正在停止…"; };
+  $("#btnInfoRefresh").onclick = refreshInfo;
   buildSpeedSources();
-  try{ const a = await api().get_admin(); isAdmin = a.admin; }catch(e){}
+  try{ const a = await api().get_admin(); isAdmin = !!(a && a.admin); }catch(e){}
   const chip = $("#adminChip");
   chip.classList.add(isAdmin?"ok":"no");
   $("#adminText").textContent = isAdmin ? "管理员模式" : "普通用户（部分修复受限）";
   buildRepairCards();
 }
-window.addEventListener("pywebviewready", init);
+
+/* pywebview 就绪后再初始化；若已就绪则立即执行 */
+if(window.pywebview && window.pywebview.api) init();
+else window.addEventListener("pywebviewready", init);
